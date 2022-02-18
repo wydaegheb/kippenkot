@@ -1,11 +1,7 @@
-//
-// Created by admin on 15/11/2021.
-//
-
 #include "MyBluetooth.h"
 
-
-void MyBluetooth::init() {
+void MyBluetooth::init()
+{
 
     // Initialise bleutooth
     // Create the BLE Device
@@ -20,16 +16,14 @@ void MyBluetooth::init() {
 
     // Create a BLE Characteristic
     pTxCharacteristic = pService->createCharacteristic(
-            CHARACTERISTIC_UUID_TX,
-            BLECharacteristic::PROPERTY_NOTIFY
-    );
+        CHARACTERISTIC_UUID_TX,
+        BLECharacteristic::PROPERTY_NOTIFY);
 
     pTxCharacteristic->addDescriptor(new BLE2902());
 
     BLECharacteristic *pRxCharacteristic = pService->createCharacteristic(
-            CHARACTERISTIC_UUID_RX,
-            BLECharacteristic::PROPERTY_WRITE
-    );
+        CHARACTERISTIC_UUID_RX,
+        BLECharacteristic::PROPERTY_WRITE);
 
     pRxCharacteristic->setCallbacks(this);
 
@@ -43,48 +37,60 @@ void MyBluetooth::init() {
     _lastMessage = "";
 }
 
-void MyBluetooth::onConnect(BLEServer *pServer) {
+void MyBluetooth::onConnect(BLEServer *pServer)
+{
     deviceConnected = true;
 };
 
-void MyBluetooth::onDisconnect(BLEServer *pServer) {
+void MyBluetooth::onDisconnect(BLEServer *pServer)
+{
     deviceConnected = false;
 }
 
-void MyBluetooth::onWrite(BLECharacteristic *pCharacteristic) {
+void MyBluetooth::onWrite(BLECharacteristic *pCharacteristic)
+{
     mtx.lock();
     std::string rxValue = pCharacteristic->getValue();
 
-    if (rxValue.length() == 1) {
-        if (_lastCommand == EMPTY_COMMAND) {
+    if (rxValue.length() == 1)
+    {
+        if (_lastCommand == EMPTY_COMMAND)
+        {
             _lastCommand = rxValue[0];
             _lastMessage.clear();
         }
-    } else if (rxValue.length() > 1) {
-        if (_lastMessage.length() == 0) {
+    }
+    else if (rxValue.length() > 1)
+    {
+        if (_lastMessage.length() == 0)
+        {
             _lastMessage = rxValue;
         }
     }
     mtx.unlock();
 }
 
-void MyBluetooth::print(std::string s) {
-    if (deviceConnected) {
+void MyBluetooth::print(std::string s)
+{
+    if (deviceConnected)
+    {
         pTxCharacteristic->setValue(std::move(s));
         pTxCharacteristic->notify();
     }
 }
 
-
-bool MyBluetooth::receivedBleStop() {
-    if (_lastCommand == STOP_BL_COMMAND) {
+bool MyBluetooth::receivedBleStop()
+{
+    if (_lastCommand == STOP_BL_COMMAND)
+    {
         getLastCommand();
         return true;
     }
     return false;
 }
 
-char MyBluetooth::getLastCommand() {
+char MyBluetooth::getLastCommand()
+{
     mtx.lock();
     char result = _lastCommand;
     _lastCommand = EMPTY_COMMAND;
@@ -92,7 +98,8 @@ char MyBluetooth::getLastCommand() {
     return result;
 }
 
-char *MyBluetooth::getLastMessage() {
+char *MyBluetooth::getLastMessage()
+{
     mtx.lock();
     char *result = new char[_lastMessage.length() + 1];
     strcpy(result, _lastMessage.c_str());
@@ -101,15 +108,7 @@ char *MyBluetooth::getLastMessage() {
     return result;
 }
 
-bool MyBluetooth::isDeviceConnected() const {
+bool MyBluetooth::isDeviceConnected() const
+{
     return deviceConnected;
 }
-
-
-
-
-
-
-
-
-

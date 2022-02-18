@@ -21,17 +21,15 @@ RTC_DS3231 myclock;
 // KippenKot
 KippenKot kippenKot;
 
-void setup() {
+
+
+void setup()
+{
+
     kippenKot.init(&myBluetooth, &ina219, &lightMeter, &myclock, &door, &printer);
 }
 
-
-void loop() {
+void loop()
+{
     kippenKot.run();
 }
-
-
-
-
-
-
