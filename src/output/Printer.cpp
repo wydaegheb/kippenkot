@@ -62,7 +62,7 @@ void Printer::print(const char *s1, const char *s2, const char *s3, float f, con
 
 void Printer::print(const std::string &s)
 {
-    if (!_printToSerial)
+    if (_printToSerial)
     {
         Serial.print(F(s.c_str()));
     }

@@ -1,14 +1,7 @@
-#include <RTClib.h>
 #include "KippenKot.h"
 
-void KippenKot::init(MyBluetooth *myBluetooth, Adafruit_INA219 *ina219, BH1750 *lightMeter, RTC_DS3231 *myclock, Door *door, Printer *printer)
+void KippenKot::init(MyBluetooth *myBluetooth, Ina219Proxy *ina219, LightMeterProxy *lightMeter, ClockProxy *myclock, Door *door, Printer *printer)
 {
-    _myBluetooth = myBluetooth;
-    _ina219 = ina219;
-    _lightMeter = lightMeter;
-    _myclock = myclock;
-    _door = door;
-    _printer = printer;
 
     Wire.begin(); // IMPORTANT!!! Without it the lightmeter does not start in "disconnected mode" (no USB connected to arduino) !!!!
 
@@ -17,14 +10,21 @@ void KippenKot::init(MyBluetooth *myBluetooth, Adafruit_INA219 *ina219, BH1750 *
         Serial.begin(115200);
     }
 
+    _myBluetooth = myBluetooth;
+    _door = door;
+    _printer = printer;
+    _ina219 = ina219;
+    _lightMeter = lightMeter;
+    _myclock = myclock;
+
     // Initialise bleutooth
-    _printer->print("\n\n!!!The Ultimate Kippenkot!!!!\n\n");
+    _printer->print("\n\n!!!The Ultimate Chicken coop!!!!\n\n");
     _printer->print("Initialising bleutooth");
     _myBluetooth->init();
     _printer->print(" - bleutooth initialised\n");
 
     // Initialise printer
-    _printer->init(_myBluetooth, PRD);
+    _printer->init(_myBluetooth, !PRD);
 
     // Initialize the INA219.
     _printer->print("Initialising the current sensor");
@@ -99,21 +99,21 @@ void KippenKot::handleBleCommands()
     char c = (char)_myBluetooth->getLastCommand();
     if (c == STATUS_BL_COMMAND)
     { // status
-        _printer->print("\nKIPPENKOT STATUS\n================================\n");
+        _printer->print("\nCHICKEN COOP STATUS\n================================\n");
 
         DateTime now = _myclock->now();
         char buffer[32]; // make this big enough to hold the resulting string
         snprintf(buffer, sizeof(buffer), "%02d/%02d/%04d %02d:%02d:%02d", now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
         _printer->print(" - TIME:   ", buffer, "\n");
         _printer->print(" - DOOR POWER:   ", abs(_ina219->getCurrent_mA()), " mA\n");
-        _printer->print(" - DAY STARTS AT:  ", beginDayHour, " hour (24h format)\n");
-        _printer->print(" - NIGHT STARTS AT:  ", beginNightHour, " hour (24h format)\n");
+        _printer->print(" - DAY STARTS AT:  ", beginDayHour, " hour\n");
+        _printer->print(" - NIGHT STARTS AT:  ", beginNightHour, " hour\n");
         _printer->print(" - LIGHT SENSOR:  ");
         if (lightSensorEnabled)
         {
             _printer->print("ENABLED\n");
         }
-        else 
+        else
         {
             _printer->print("DISABLED\n");
         }
@@ -166,7 +166,7 @@ void KippenKot::handleBleCommands()
         int minutes = minRes.intValue;
         _myclock->adjust(DateTime(year, month, day, hour, minutes, 0));
         std::stringstream os;
-        os << "\nSetting date and time to:" << year << "/" << month << "/" << day << " " << hour << ":" << minutes << "\nSucces. Date and time updated.\n";
+        os << "\nSetting date and time to: " << year << "/" << month << "/" << day << " " << hour << ":" << minutes << "\nSucces. Date and time updated.\n";
         _printer->print(os.str());
     }
     else if (c == START_DAY_HOUR_BLE_COMMAND)
@@ -195,19 +195,19 @@ void KippenKot::handleBleCommands()
     }
     else if (c == CLOSE_BL_COMMAND)
     { // close
-        _printer->print("\nBL: Closing door -> MANUAL MODE!!!!\n");
+        _printer->print("\nClosing door - MANUAL MODE!!!!\n");
         automaticMode = false;
         closeDoorCompletely(0);
     }
     else if (c == OPEN_BL_COMMAND)
     { // open
-        _printer->print("\nBL: Opening door -> MANUAL MODE!!!!\n");
+        _printer->print("\n Opening door - MANUAL MODE!!!!\n");
         automaticMode = false;
         openDoorCompletely();
     }
     else if (c == STOP_BL_COMMAND)
     { // stop
-        _printer->print("\nBL: Stop door -> MANUAL MODE!!!!\n");
+        _printer->print("\nStop door - MANUAL MODE!!!!\n");
         automaticMode = false;
         stopReceived = true;
         _door->stopDoor();
@@ -226,6 +226,8 @@ void KippenKot::handleBleCommands()
     { // re-enable light sensor
         _printer->print("\nLight sensor enabled\n");
         lightSensorEnabled = true;
+        nrOfConsistentLuxReadings = 1;
+        isNightBasedOnLightMeter = false;
     }
 }
 
@@ -234,12 +236,13 @@ bool KippenKot::stopBasedOnCurrent()
     float current_mA = abs(_ina219->getCurrent_mA());
     if (current_mA > maxCurrent)
     {
-        _printer->print("Current:       ", current_mA, " mA (retrying)\n");
+        _printer->print("Current: ", current_mA, " mA (retrying)\n");
         delay(100);
         current_mA = abs(_ina219->getCurrent_mA());
+        current_mA = 10;
         if (current_mA > maxCurrent)
         {
-            _printer->print("Current:       ", current_mA, " mA. Stopping current above treshold!\n");
+            _printer->print("Current: ", current_mA, " mA. Stopping current above treshold!\n");
             return true;
         }
     }
@@ -251,7 +254,7 @@ void KippenKot::openDoorCompletely()
     unsigned long stopTime = millis() + MAX_TURN_TIME;
 
     _door->setDoorStatus(DOOR_OPENING);
-    _printer->print("Opening door for maximum: ", MAX_TURN_TIME, " ms or limit power triggered.\n");
+    _printer->print("Opening door for maximum: ", MAX_TURN_TIME, " ms or blocked.\n");
 
     _door->openDoor();
 
@@ -261,7 +264,7 @@ void KippenKot::openDoorCompletely()
         delay(1);
         stopReceived = _myBluetooth->receivedBleStop() || stopBasedOnCurrent();
     }
-    _printer->print("Door opened or stopped.\n");
+    _printer->print("Door opened or blocked.\n");
     _door->closeDoor(100);
     _door->setDoorStatus(DOOR_OPENED);
 }
@@ -273,7 +276,7 @@ void KippenKot::closeDoorCompletely(int tryCount)
     unsigned long stopTime = startTime + MAX_TURN_TIME;
 
     _door->setDoorStatus(DOOR_CLOSING);
-    _printer->print("Closing door for maximum: ", MAX_TURN_TIME, " ms or limit power triggered.\n");
+    _printer->print("Closing door for maximum: ", MAX_TURN_TIME, " ms or blocked.\n");
 
     _door->closeDoor();
 
@@ -294,7 +297,7 @@ void KippenKot::closeDoorCompletely(int tryCount)
     _door->stopDoor();
     if (!stopCrushedChicken)
     {
-        _printer->print("Door closed or stopped.\n");
+        _printer->print("Door closed or blocked.\n");
         _door->openDoor(100); // just a little debounce
         _door->setDoorStatus(DOOR_CLOSED);
     }
@@ -319,33 +322,34 @@ void KippenKot::closeDoorCompletely(int tryCount)
 
 bool KippenKot::resolveNightOrDay()
 {
-    bool isNight;
+    if (lightSensorEnabled)
+    {
+        // measure light
+        float lux = _lightMeter->readLightLevel();
+        boolean measuredIsNightValue = (lux < NIGHT_LUX_VALUE);
+        if (measuredIsNightValue != isNight)
+        {
+            nrOfConsistentLuxReadings++;
+        }
+        else
+        {
+            nrOfConsistentLuxReadings = 1;
+        }
 
-    // measure light
-    float lux = _lightMeter->readLightLevel();
-    boolean measuredIsNightValue = (lux < NIGHT_LUX_VALUE);
-    if (isNightBasedOnLightMeter != measuredIsNightValue)
-    {
-        nrOfConsistentLuxReadings++;
-    }
-    else
-    {
-        nrOfConsistentLuxReadings = 1;
-    }
+        if (nrOfConsistentLuxReadings > MIN_NR_OF_CONSISTENT_LUX_READINGS)
+        {
+            nrOfConsistentLuxReadings = 1;
+            isNightBasedOnLightMeter = measuredIsNightValue;
+        }
 
-    if (nrOfConsistentLuxReadings > MIN_NR_OF_CONSISTENT_LUX_READINGS)
-    {
-        nrOfConsistentLuxReadings = 1;
-        isNightBasedOnLightMeter = measuredIsNightValue;
-    }
-
-    if (measuredIsNightValue)
-    {
-        _printer->print("Light: ", lux, " lux (=night) - count: ", nrOfConsistentLuxReadings, "/3\n");
-    }
-    else
-    {
-        _printer->print("Light: ", lux, " lux (=day) - count: ", nrOfConsistentLuxReadings, "/3\n");
+        if (measuredIsNightValue)
+        {
+            _printer->print("Light: ", lux, " lux (=night) - count: ", nrOfConsistentLuxReadings, "/3\n");
+        }
+        else
+        {
+            _printer->print("Light: ", lux, " lux (=day) - count: ", nrOfConsistentLuxReadings, "/3\n");
+        }
     }
 
     // get time
@@ -366,30 +370,32 @@ bool KippenKot::resolveNightOrDay()
     }
 
     // resolve
-    if (lightSensorEnabled)
-    {
-        return isNightBasedOnClock;
+
+    if (isNightBasedOnClock)
+    { // clock overrides night time (even when there is light in the night the door wil not open)
+        isNight = true;
     }
     else
     {
-        if (isNightBasedOnClock)
-        { // clock overrides night time (even when there is light in the night the door wil not open)
-            isNight = true;
-        }
-        else
-        { // during "day time hours" the light sensor determines the state of the door (after a configurable number of consistent light readings)
+        if (lightSensorEnabled)
+        {
+            // during "day time hours" the light sensor determines the state of the door (after a configurable number of consistent light readings)
             isNight = isNightBasedOnLightMeter;
         }
-        if (isNight)
-        {
-            _printer->print("-> Night busy\n");
-        }
         else
         {
-            _printer->print("-> Day busy\n");
+            isNight = false;
         }
-        return isNight;
     }
+    if (isNight)
+    {
+        _printer->print("- Night: door should be closed/closing\n");
+    }
+    else
+    {
+        _printer->print("- Day: door should be open/opening\n");
+    }
+    return isNight;
 }
 
 int KippenKot::getBeginDayHour() const

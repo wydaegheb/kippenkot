@@ -4,9 +4,10 @@
 #include <bluetooth/MyBluetooth.h>
 #include <output/Printer.h>
 #include <door/Door.h>
-#include <Adafruit_INA219.h>
-#include <BH1750.h>
-#include <RTClib.h>
+
+#include "proxies/Ina219Proxy.h"
+#include "proxies/LightMeterProxy.h"
+#include "proxies/ClockProxy.h"
 
 #define LIGHT_MEASUREMENT_INTERVAL 5000
 #define NIGHT_LUX_VALUE 100
@@ -23,7 +24,7 @@ struct IntResult
 class KippenKot
 {
 public:
-    void init(MyBluetooth *myBluetooth, Adafruit_INA219 *ina219, BH1750 *lightMeter, RTC_DS3231 *myclock, Door *door, Printer *printer);
+    void init(MyBluetooth *myBluetooth, Ina219Proxy *ina219, LightMeterProxy *lightMeter, ClockProxy *myclock, Door *door, Printer *printer);
 
     void run();
 
@@ -54,9 +55,9 @@ private:
     MyBluetooth *_myBluetooth;
     Door *_door;
     Printer *_printer;
-    Adafruit_INA219 *_ina219;
-    BH1750 *_lightMeter;
-    RTC_DS3231 *_myclock;
+    Ina219Proxy *_ina219;
+    LightMeterProxy *_lightMeter;
+    ClockProxy *_myclock;
 
     int maxCurrent = 200;
 
@@ -65,13 +66,13 @@ private:
 
     int nrOfConsistentLuxReadings = 0;
     bool isNightBasedOnLightMeter = false;
-
     bool isNightBasedOnClock = false;
+    bool isNight = false;
     int beginDayHour = 8;
     int beginNightHour = 23;
 
     boolean automaticMode = true;
-    boolean lightSensorEnabled = true;
+    boolean lightSensorEnabled = false;
     unsigned long _time;
 };
 
